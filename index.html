@@ -1,0 +1,145 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,user-scalable=no">
+<meta name="theme-color" content="#0f1418">
+<meta name="apple-mobile-web-app-title" content="語音筆記">
+<title>行車語音筆記</title>
+<style>
+:root{--bg:#0f1418;--panel:#182027;--line:#26313a;--fg:#e9eef2;--muted:#8a99a6;--mic:#2f80ed;--mic-on:#e5484d;--del:#f2a33a;
+  --font:-apple-system,"PingFang TC","Noto Sans TC",system-ui,sans-serif;color-scheme:dark}
+*{box-sizing:border-box}
+html,body{height:100%;margin:0}
+body{background:var(--bg);color:var(--fg);font-family:var(--font);overflow:hidden;-webkit-text-size-adjust:100%;
+  padding:env(safe-area-inset-top,0px) max(16px,env(safe-area-inset-right,0px)) env(safe-area-inset-bottom,0px) max(16px,env(safe-area-inset-left,0px))}
+.app{height:100%;display:grid;grid-template-rows:auto minmax(0,1fr) auto auto;gap:10px;padding-block:10px}
+header{display:flex;gap:8px;justify-content:flex-end}
+.chip{background:var(--panel);color:var(--fg);border:1px solid var(--line);border-radius:999px;padding:9px 16px;font:inherit;font-size:15px;cursor:pointer}
+.chip.warn{color:var(--mic-on)}
+.note{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:14px;overflow-y:auto;min-height:0;-webkit-overflow-scrolling:touch}
+#text{width:100%;min-height:60%;background:transparent;border:0;color:var(--fg);font:inherit;font-size:22px;line-height:1.6;resize:none;outline:none;padding:0;display:block}
+#partial{color:var(--muted);font-size:22px;line-height:1.6;white-space:pre-wrap}
+.status{font-size:14px;color:var(--muted);min-height:20px;display:flex;align-items:center;gap:8px}
+.dot{width:10px;height:10px;border-radius:50%;background:var(--muted);flex:none}
+.listening .dot{background:var(--mic-on);animation:pulse 1.2s infinite}
+@keyframes pulse{50%{opacity:.3}}
+.controls{display:grid;grid-template-columns:1fr 1fr;gap:12px;height:40vh;min-height:200px;max-height:360px}
+.big{border:0;border-radius:22px;font:inherit;font-weight:700;font-size:26px;color:#fff;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:10px;cursor:pointer;user-select:none;-webkit-user-select:none;-webkit-touch-callout:none;touch-action:manipulation;-webkit-tap-highlight-color:transparent}
+.big svg,.big span{pointer-events:none}
+.big svg{width:64px;height:64px}
+.big:active{transform:scale(.98)}
+#mic{background:var(--mic)}
+.listening #mic{background:var(--mic-on)}
+#del{background:var(--del);color:#1d1406}
+</style>
+</head>
+<body>
+<div class="app" id="app">
+  <header>
+    <button class="chip warn" id="clear" type="button">清空</button>
+    <button class="chip" id="copy" type="button">複製</button>
+    <button class="chip" id="share" type="button">分享</button>
+  </header>
+  <div class="note" id="noteBox">
+    <textarea id="text" readonly placeholder="按下麥克風開始說話。說錯的字，按右邊的倒退鍵刪除。說完按「分享」傳到 Keep，或按「複製」再貼上。" aria-label="筆記內容"></textarea>
+    <div id="partial" aria-live="polite"></div>
+  </div>
+  <div class="status"><span class="dot"></span><span id="statusText">按「開始」說話</span></div>
+  <div class="controls">
+    <button class="big" id="mic" type="button" aria-label="開啟麥克風">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="9" y="2" width="6" height="12" rx="3"/><path d="M5 10a7 7 0 0 0 14 0M12 17v4M8 21h8"/></svg>
+      <span id="micLabel">開始</span>
+    </button>
+    <button class="big" id="del" type="button" aria-label="倒退刪除一個字">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 5H9l-6 7 6 7h12a1 1 0 0 0 1-1V6a1 1 0 0 0-1-1z"/><path d="M17 9l-5 6M12 9l5 6"/></svg>
+      <span>倒退</span>
+    </button>
+  </div>
+</div>
+<script>
+(function(){
+  const $=id=>document.getElementById(id);
+  const app=$("app"), ta=$("text"), partialEl=$("partial");
+  const LS="voicenote.simple";
+  function setStatus(s){ $("statusText").textContent=s; }
+  function scrollEnd(){ const b=$("noteBox"); b.scrollTop=b.scrollHeight; }
+  // keep the text if Safari reloads the page
+  function setText(v){ ta.value=v; try{ localStorage.setItem(LS,v); }catch(e){} scrollEnd(); }
+  try{ ta.value=localStorage.getItem(LS)||""; }catch(e){}
+
+  // ---------- speech ----------
+  const SR=window.SpeechRecognition||window.webkitSpeechRecognition;
+  let rec=null, want=false, running=false, finalCount=0, interim="", restartT=null;
+  const CJK=/[　-鿿＀-￯]/;
+  function join(a,b){ b=b.trim(); if(!b) return a; if(!a) return b; return (CJK.test(a.slice(-1))||CJK.test(b[0]))?a+b:a+" "+b; }
+  function setListening(on){ app.classList.toggle("listening",on); $("micLabel").textContent=on?"停止":"開始"; $("mic").setAttribute("aria-label",on?"關閉麥克風":"開啟麥克風"); }
+  function commitInterim(){ if(interim){ setText(join(ta.value,interim)); interim=""; partialEl.textContent=""; } }
+  function makeRec(){
+    const r=new SR(); r.lang="zh-TW"; r.continuous=true; r.interimResults=true;
+    r.onstart=()=>{ running=true; finalCount=0; interim=""; setStatus("收音中，請說話"); };
+    r.onresult=e=>{
+      let pending="";
+      for(let i=finalCount;i<e.results.length;i++){
+        const res=e.results[i];
+        if(res.isFinal&&i===finalCount){ setText(join(ta.value,res[0].transcript)); finalCount++; }
+        else pending+=res[0].transcript;
+      }
+      interim=pending; partialEl.textContent=pending; scrollEnd();
+    };
+    r.onerror=e=>{
+      if(e.error==="not-allowed"||e.error==="service-not-allowed"){ want=false; setStatus("沒有權限：請到「設定 > Safari > 麥克風」允許，並開啟「設定 > Siri > 聽寫」"); }
+      else if(e.error==="network"){ setStatus("網路不穩，重新連線中…"); }
+    };
+    r.onend=()=>{ running=false; commitInterim();
+      if(want){ clearTimeout(restartT); restartT=setTimeout(start,250); }
+      else { setListening(false); setStatus("已停止"); } };
+    return r;
+  }
+  function start(){ if(!want||running) return; try{ rec=makeRec(); rec.start(); }catch(e){ restartT=setTimeout(start,500); } }
+  $("mic").addEventListener("click",()=>{
+    if(!SR){ setStatus("這個瀏覽器不支援語音辨識，請用 Safari 開啟"); return; }
+    if(want){ want=false; clearTimeout(restartT); try{ rec&&rec.stop(); }catch(e){} setListening(false); setStatus("已停止"); return; }
+    want=true; setListening(true); setStatus("開啟麥克風中…");
+    try{ rec=makeRec(); rec.start(); }catch(e){ want=false; setListening(false); setStatus("無法開始，請再按一次"); }
+    keepAwake();
+  });
+  let wake=null;
+  async function keepAwake(){ try{ if(!wake&&navigator.wakeLock){ wake=await navigator.wakeLock.request("screen"); wake.onrelease=()=>wake=null; } }catch(e){} }
+
+  // ---------- backspace (tap = 1 char, hold = keep deleting) ----------
+  function backspace(){
+    if(interim){ commitInterim(); if(running){ try{ rec.abort(); }catch(e){} } }
+    if(!ta.value) return;
+    const c=Array.from(ta.value); c.pop(); setText(c.join("").replace(/[ \t]+$/,""));
+  }
+  const del=$("del"); let holdT=null, repT=null;
+  function stopHold(){ clearTimeout(holdT); clearInterval(repT); holdT=repT=null; }
+  function down(e){ if(e.cancelable) e.preventDefault(); backspace(); holdT=setTimeout(()=>{ repT=setInterval(backspace,140); },550); }
+  del.addEventListener("touchstart",down,{passive:false});
+  del.addEventListener("touchend",stopHold); del.addEventListener("touchcancel",stopHold);
+  del.addEventListener("mousedown",down); del.addEventListener("mouseup",stopHold); del.addEventListener("mouseleave",stopHold);
+  del.addEventListener("contextmenu",e=>e.preventDefault());
+
+  // ---------- share / copy / clear ----------
+  function flash(btn,msg,orig){ btn.textContent=msg; setTimeout(()=>btn.textContent=orig,1500); }
+  function full(){ commitInterim(); return ta.value; }
+  $("share").addEventListener("click",()=>{
+    const t=full(); if(!t) return;
+    if(navigator.share){ navigator.share({text:t}).catch(()=>{}); }
+    else { navigator.clipboard.writeText(t).then(()=>flash($("share"),"已複製","分享"),()=>{}); }
+  });
+  $("copy").addEventListener("click",()=>{ const t=full(); if(!t) return;
+    navigator.clipboard.writeText(t).then(()=>flash($("copy"),"已複製","複製"),()=>{ ta.select(); }); });
+  let armed=false, armT=null;
+  $("clear").addEventListener("click",()=>{
+    if(!armed){ armed=true; $("clear").textContent="再按一次清空"; armT=setTimeout(()=>{ armed=false; $("clear").textContent="清空"; },3000); return; }
+    clearTimeout(armT); armed=false; $("clear").textContent="清空"; interim=""; partialEl.textContent=""; setText("");
+  });
+
+  if(!SR) setStatus("這個瀏覽器不支援語音辨識，請用 Safari 開啟");
+  scrollEnd();
+})();
+</script>
+</body>
+</html>
