@@ -7,24 +7,34 @@
 <meta name="apple-mobile-web-app-title" content="語音筆記">
 <title>行車語音筆記</title>
 <style>
-:root{--bg:#0f1418;--panel:#182027;--line:#26313a;--fg:#e9eef2;--muted:#8a99a6;--mic:#2f80ed;--mic-on:#e5484d;--del:#f2a33a;
-  --font:-apple-system,"PingFang TC","Noto Sans TC",system-ui,sans-serif;color-scheme:dark}
+:root{--bg:#0f1418;--panel:#182027;--line:#26313a;--fg:#e9eef2;--muted:#8a99a6;--mic:#2f80ed;--mic-on:#e5484d;--del:#f2a33a;--last:#ffd166;
+  --fs:28px;--font:-apple-system,"PingFang TC","Noto Sans TC",system-ui,sans-serif;color-scheme:dark}
 *{box-sizing:border-box}
 html,body{height:100%;margin:0}
 body{background:var(--bg);color:var(--fg);font-family:var(--font);overflow:hidden;-webkit-text-size-adjust:100%;
   padding:env(safe-area-inset-top,0px) max(16px,env(safe-area-inset-right,0px)) env(safe-area-inset-bottom,0px) max(16px,env(safe-area-inset-left,0px))}
-.app{height:100%;display:grid;grid-template-rows:auto minmax(0,1fr) auto auto;gap:10px;padding-block:10px}
+[hidden]{display:none!important}
+.app{height:100%;display:grid;grid-template-rows:auto minmax(0,1fr) auto auto auto;gap:10px;padding-block:10px}
 header{display:flex;gap:8px;justify-content:flex-end}
-.chip{background:var(--panel);color:var(--fg);border:1px solid var(--line);border-radius:999px;padding:9px 16px;font:inherit;font-size:15px;cursor:pointer}
+.chip{background:var(--panel);color:var(--fg);border:1px solid var(--line);border-radius:999px;padding:9px 15px;font:inherit;font-size:15px;cursor:pointer}
 .chip.warn{color:var(--mic-on)}
-.note{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:14px;overflow-y:auto;min-height:0;-webkit-overflow-scrolling:touch}
-#text{width:100%;min-height:60%;background:transparent;border:0;color:var(--fg);font:inherit;font-size:22px;line-height:1.6;resize:none;outline:none;padding:0;display:block}
-#partial{color:var(--muted);font-size:22px;line-height:1.6;white-space:pre-wrap}
+.noteWrap{position:relative;min-height:0}
+.note{height:100%;background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:14px;overflow-y:auto;-webkit-overflow-scrolling:touch}
+.tail .note{overflow:hidden}
+#view{font-size:var(--fs);line-height:1.5;white-space:pre-wrap;word-break:break-word;min-height:100%}
+#view .ph{color:var(--muted);font-size:18px}
+#view .last{color:var(--last);border-bottom:3px solid var(--last)}
+#view .nl{color:var(--last);opacity:.8}
+#view .partial{color:var(--muted)}
+#fullBtn{top:10px;bottom:auto;background:var(--line);opacity:.92}
+.float{position:absolute;right:10px;bottom:10px;background:var(--mic);color:#fff;border:0;border-radius:999px;padding:10px 16px;font:inherit;font-size:15px;box-shadow:0 2px 10px rgba(0,0,0,.4)}
 .status{font-size:14px;color:var(--muted);min-height:20px;display:flex;align-items:center;gap:8px}
 .dot{width:10px;height:10px;border-radius:50%;background:var(--muted);flex:none}
 .listening .dot{background:var(--mic-on);animation:pulse 1.2s infinite}
 @keyframes pulse{50%{opacity:.3}}
-.controls{display:grid;grid-template-columns:1fr 1fr;gap:12px;height:40vh;min-height:200px;max-height:360px}
+#nlBtn{height:52px;border:1px solid var(--line);border-radius:14px;background:var(--panel);color:var(--fg);font:inherit;font-size:18px;font-weight:600;touch-action:manipulation;-webkit-tap-highlight-color:transparent}
+#nlBtn:active{background:var(--line)}
+.controls{display:grid;grid-template-columns:1fr 1fr;gap:12px;height:36vh;min-height:190px;max-height:340px}
 .big{border:0;border-radius:22px;font:inherit;font-weight:700;font-size:26px;color:#fff;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:10px;cursor:pointer;user-select:none;-webkit-user-select:none;-webkit-touch-callout:none;touch-action:manipulation;-webkit-tap-highlight-color:transparent}
 .big svg,.big span{pointer-events:none}
 .big svg{width:64px;height:64px}
@@ -32,20 +42,36 @@ header{display:flex;gap:8px;justify-content:flex-end}
 #mic{background:var(--mic)}
 .listening #mic{background:var(--mic-on)}
 #del{background:var(--del);color:#1d1406}
+/* overlays */
+.sheet{position:fixed;inset:0;background:var(--bg);z-index:20;display:flex;flex-direction:column;gap:14px;
+  padding:calc(12px + env(safe-area-inset-top,0px)) max(16px,env(safe-area-inset-right,0px)) calc(12px + env(safe-area-inset-bottom,0px)) max(16px,env(safe-area-inset-left,0px))}
+.sheet .row{display:flex;align-items:center;gap:8px}
+.sheet h2{margin:0;font-size:19px;flex:1}
+.scroll{overflow-y:auto;min-height:0;flex:1;display:flex;flex-direction:column;gap:18px}
+.group{display:flex;flex-direction:column;gap:8px}
+.group > b{font-size:15px;color:var(--muted);font-weight:600}
+.seg{display:flex;gap:8px;flex-wrap:wrap}
+.seg button{flex:1;min-width:90px;padding:12px;border-radius:12px;border:1px solid var(--line);background:var(--panel);color:var(--fg);font:inherit;font-size:16px}
+.seg button[aria-pressed="true"]{border-color:var(--mic);background:#1d3a63}
+.hint{font-size:14px;color:var(--muted);line-height:1.6;margin:0}
+#fullText{font-size:20px;line-height:1.6;white-space:pre-wrap;word-break:break-word}
 </style>
 </head>
 <body>
-<div class="app" id="app">
+<div class="app tail" id="app">
   <header>
     <button class="chip warn" id="clear" type="button">清空</button>
     <button class="chip" id="copy" type="button">複製</button>
     <button class="chip" id="share" type="button">分享</button>
+    <button class="chip" id="openSet" type="button">設定</button>
   </header>
-  <div class="note" id="noteBox">
-    <textarea id="text" readonly placeholder="按下麥克風開始說話。說錯的字，按右邊的倒退鍵刪除。說完按「分享」傳到 Keep，或按「複製」再貼上。" aria-label="筆記內容"></textarea>
-    <div id="partial" aria-live="polite"></div>
+  <div class="noteWrap">
+    <div class="note" id="noteBox"><div id="view" aria-live="polite"></div></div>
+    <button class="float" id="fullBtn" type="button">看全文</button>
+    <button class="float" id="latestBtn" type="button" hidden>↓ 回到最新</button>
   </div>
   <div class="status"><span class="dot"></span><span id="statusText">按「開始」說話</span></div>
+  <button id="nlBtn" type="button">↵ 換行</button>
   <div class="controls">
     <button class="big" id="mic" type="button" aria-label="開啟麥克風">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="9" y="2" width="6" height="12" rx="3"/><path d="M5 10a7 7 0 0 0 14 0M12 17v4M8 21h8"/></svg>
@@ -57,24 +83,119 @@ header{display:flex;gap:8px;justify-content:flex-end}
     </button>
   </div>
 </div>
+
+<div class="sheet" id="fullSheet" hidden>
+  <div class="row"><h2>全文</h2><button class="chip" id="closeFull" type="button">關閉</button></div>
+  <div class="scroll"><div id="fullText"></div></div>
+</div>
+
+<div class="sheet" id="setSheet" hidden>
+  <div class="row"><h2>設定</h2><button class="chip" id="closeSet" type="button">完成</button></div>
+  <div class="scroll">
+    <div class="group"><b>顯示方式</b>
+      <div class="seg" data-key="mode">
+        <button type="button" data-val="tail">只看最後幾行</button>
+        <button type="button" data-val="scroll">全文自動捲動</button>
+      </div>
+      <p class="hint">「只看最後幾行」：畫面永遠停在最新的內容，要看前面請按「看全文」。<br>「全文自動捲動」：可以往上滑看前面，滑上去時會暫停捲動，按「回到最新」回到底部。</p>
+    </div>
+    <div class="group"><b>字體大小</b>
+      <div class="seg" data-key="fs">
+        <button type="button" data-val="22">中</button>
+        <button type="button" data-val="28">大</button>
+        <button type="button" data-val="34">特大</button>
+      </div>
+    </div>
+    <div class="group"><b>換行鍵</b>
+      <div class="seg" data-key="nlBtn">
+        <button type="button" data-val="on">顯示</button>
+        <button type="button" data-val="off">隱藏</button>
+      </div>
+    </div>
+    <div class="group"><b>語音指令</b>
+      <div class="seg" data-key="cmds">
+        <button type="button" data-val="on">開啟</button>
+        <button type="button" data-val="off">關閉</button>
+      </div>
+      <p class="hint">開啟時，說出下面的詞會變成符號，不會打出文字：<br>「換行」「下一段」「新段落」→ 換段<br>「逗號」→ ，　「句號」→ 。　「問號」→ ？<br>「驚嘆號」→ ！　「冒號」→ ：　「頓號」→ 、</p>
+    </div>
+  </div>
+</div>
+
 <script>
 (function(){
   const $=id=>document.getElementById(id);
-  const app=$("app"), ta=$("text"), partialEl=$("partial");
-  const LS="voicenote.simple";
-  function setStatus(s){ $("statusText").textContent=s; }
-  function scrollEnd(){ const b=$("noteBox"); b.scrollTop=b.scrollHeight; }
-  // keep the text if Safari reloads the page
-  function setText(v){ ta.value=v; try{ localStorage.setItem(LS,v); }catch(e){} scrollEnd(); }
-  try{ ta.value=localStorage.getItem(LS)||""; }catch(e){}
+  const app=$("app"), view=$("view"), box=$("noteBox");
+  const LS="voicenote.simple", LSS="voicenote.settings";
+  let text="", interim="";
+  try{ text=localStorage.getItem(LS)||""; }catch(e){}
+
+  // ---------- settings ----------
+  const DEF={mode:"tail",fs:"28",nlBtn:"on",cmds:"on"};
+  let S=Object.assign({},DEF); try{ Object.assign(S,JSON.parse(localStorage.getItem(LSS)||"{}")); }catch(e){}
+  function applySettings(){
+    app.classList.toggle("tail",S.mode==="tail");
+    document.documentElement.style.setProperty("--fs",S.fs+"px");
+    $("nlBtn").hidden=S.nlBtn!=="on";
+    $("fullBtn").hidden=S.mode!=="tail";
+    if(S.mode!=="scroll") $("latestBtn").hidden=true;
+    document.querySelectorAll(".seg").forEach(g=>g.querySelectorAll("button").forEach(b=>b.setAttribute("aria-pressed",String(S[g.dataset.key]===b.dataset.val))));
+    follow=true; render();
+  }
+  document.querySelectorAll(".seg").forEach(g=>g.addEventListener("click",e=>{
+    const b=e.target.closest("button"); if(!b) return;
+    S[g.dataset.key]=b.dataset.val; try{ localStorage.setItem(LSS,JSON.stringify(S)); }catch(e){} applySettings();
+  }));
+  $("openSet").addEventListener("click",()=>$("setSheet").hidden=false);
+  $("closeSet").addEventListener("click",()=>$("setSheet").hidden=true);
+
+  // ---------- rendering ----------
+  let follow=true;   // auto-scroll to newest
+  function esc(s){ return s.replace(/[&<>]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;"}[c])); }
+  function render(){
+    view.textContent="";
+    if(!text&&!interim){ const p=document.createElement("span"); p.className="ph"; p.textContent="按下麥克風開始說話。說錯的字，按右邊的倒退鍵刪除。說「換行」可以分段。說完按「分享」傳到 Keep。"; view.append(p); return; }
+    const chars=Array.from(text);
+    const last=chars.pop();
+    let html=esc(chars.join(""));
+    if(last!==undefined){
+      html+= last==="\n" ? '<span class="nl">↵</span>\n' : '<span class="last">'+esc(last)+'</span>';
+    }
+    if(interim) html+='<span class="partial">'+esc(interim)+'</span>';
+    view.innerHTML=html;
+    if(follow||S.mode==="tail") box.scrollTop=box.scrollHeight;
+  }
+  box.addEventListener("scroll",()=>{
+    if(S.mode!=="scroll") return;
+    const atEnd=box.scrollHeight-box.scrollTop-box.clientHeight<30;
+    follow=atEnd; $("latestBtn").hidden=atEnd;
+  },{passive:true});
+  $("latestBtn").addEventListener("click",()=>{ follow=true; $("latestBtn").hidden=true; box.scrollTop=box.scrollHeight; });
+  $("fullBtn").addEventListener("click",()=>{ $("fullText").textContent=text||"（目前沒有內容）"; $("fullSheet").hidden=false; });
+  $("closeFull").addEventListener("click",()=>$("fullSheet").hidden=true);
+
+  function setText(v){ text=v; try{ localStorage.setItem(LS,v); }catch(e){} render(); }
+
+  // ---------- voice commands ----------
+  const CMDS=[[/(換行|下一段|新段落|換段)/g,"\n"],[/逗號/g,"，"],[/句號/g,"。"],[/問號/g,"？"],[/(驚嘆號|驚歎號)/g,"！"],[/冒號/g,"："],[/頓號/g,"、"]];
+  function applyCmds(s){
+    if(S.cmds!=="on") return s;
+    CMDS.forEach(([re,r])=>{ s=s.replace(re,r); });
+    return s.replace(/[ \t]*\n[ \t]*/g,"\n").replace(/\s+([，。？！：、])/g,"$1").replace(/([，。？！：、])[ \t]+/g,"$1");
+  }
+  const CJK=/[　-鿿＀-￯\n]/;
+  function join(a,b){
+    b=applyCmds(b.trim()); if(!b) return a; if(!a) return b.replace(/^\n+/,"");
+    if(CJK.test(a.slice(-1))||CJK.test(b[0])) return a+b;
+    return a+" "+b;
+  }
 
   // ---------- speech ----------
   const SR=window.SpeechRecognition||window.webkitSpeechRecognition;
-  let rec=null, want=false, running=false, finalCount=0, interim="", restartT=null;
-  const CJK=/[　-鿿＀-￯]/;
-  function join(a,b){ b=b.trim(); if(!b) return a; if(!a) return b; return (CJK.test(a.slice(-1))||CJK.test(b[0]))?a+b:a+" "+b; }
+  let rec=null, want=false, running=false, finalCount=0, restartT=null;
+  function setStatus(s){ $("statusText").textContent=s; }
   function setListening(on){ app.classList.toggle("listening",on); $("micLabel").textContent=on?"停止":"開始"; $("mic").setAttribute("aria-label",on?"關閉麥克風":"開啟麥克風"); }
-  function commitInterim(){ if(interim){ setText(join(ta.value,interim)); interim=""; partialEl.textContent=""; } }
+  function commitInterim(){ if(interim){ const i=interim; interim=""; setText(join(text,i)); } }
   function makeRec(){
     const r=new SR(); r.lang="zh-TW"; r.continuous=true; r.interimResults=true;
     r.onstart=()=>{ running=true; finalCount=0; interim=""; setStatus("收音中，請說話"); };
@@ -82,10 +203,10 @@ header{display:flex;gap:8px;justify-content:flex-end}
       let pending="";
       for(let i=finalCount;i<e.results.length;i++){
         const res=e.results[i];
-        if(res.isFinal&&i===finalCount){ setText(join(ta.value,res[0].transcript)); finalCount++; }
+        if(res.isFinal&&i===finalCount){ interim=""; setText(join(text,res[0].transcript)); finalCount++; }
         else pending+=res[0].transcript;
       }
-      interim=pending; partialEl.textContent=pending; scrollEnd();
+      interim=pending; render();
     };
     r.onerror=e=>{
       if(e.error==="not-allowed"||e.error==="service-not-allowed"){ want=false; setStatus("沒有權限：請到「設定 > Safari > 麥克風」允許，並開啟「設定 > Siri > 聽寫」"); }
@@ -100,18 +221,24 @@ header{display:flex;gap:8px;justify-content:flex-end}
   $("mic").addEventListener("click",()=>{
     if(!SR){ setStatus("這個瀏覽器不支援語音辨識，請用 Safari 開啟"); return; }
     if(want){ want=false; clearTimeout(restartT); try{ rec&&rec.stop(); }catch(e){} setListening(false); setStatus("已停止"); return; }
-    want=true; setListening(true); setStatus("開啟麥克風中…");
+    want=true; follow=true; setListening(true); setStatus("開啟麥克風中…");
     try{ rec=makeRec(); rec.start(); }catch(e){ want=false; setListening(false); setStatus("無法開始，請再按一次"); }
     keepAwake();
   });
   let wake=null;
   async function keepAwake(){ try{ if(!wake&&navigator.wakeLock){ wake=await navigator.wakeLock.request("screen"); wake.onrelease=()=>wake=null; } }catch(e){} }
 
+  // ---------- newline button ----------
+  $("nlBtn").addEventListener("click",()=>{
+    if(interim){ commitInterim(); if(running){ try{ rec.abort(); }catch(e){} } }
+    if(text && !text.endsWith("\n")){ follow=true; setText(text+"\n"); }
+  });
+
   // ---------- backspace (tap = 1 char, hold = keep deleting) ----------
   function backspace(){
     if(interim){ commitInterim(); if(running){ try{ rec.abort(); }catch(e){} } }
-    if(!ta.value) return;
-    const c=Array.from(ta.value); c.pop(); setText(c.join("").replace(/[ \t]+$/,""));
+    if(!text) return;
+    const c=Array.from(text); c.pop(); follow=true; setText(c.join("").replace(/[ \t]+$/,""));
   }
   const del=$("del"); let holdT=null, repT=null;
   function stopHold(){ clearTimeout(holdT); clearInterval(repT); holdT=repT=null; }
@@ -123,22 +250,23 @@ header{display:flex;gap:8px;justify-content:flex-end}
 
   // ---------- share / copy / clear ----------
   function flash(btn,msg,orig){ btn.textContent=msg; setTimeout(()=>btn.textContent=orig,1500); }
-  function full(){ commitInterim(); return ta.value; }
+  function full(){ commitInterim(); return text; }
   $("share").addEventListener("click",()=>{
     const t=full(); if(!t) return;
     if(navigator.share){ navigator.share({text:t}).catch(()=>{}); }
     else { navigator.clipboard.writeText(t).then(()=>flash($("share"),"已複製","分享"),()=>{}); }
   });
   $("copy").addEventListener("click",()=>{ const t=full(); if(!t) return;
-    navigator.clipboard.writeText(t).then(()=>flash($("copy"),"已複製","複製"),()=>{ ta.select(); }); });
+    navigator.clipboard.writeText(t).then(()=>flash($("copy"),"已複製","複製"),()=>{}); });
   let armed=false, armT=null;
   $("clear").addEventListener("click",()=>{
     if(!armed){ armed=true; $("clear").textContent="再按一次清空"; armT=setTimeout(()=>{ armed=false; $("clear").textContent="清空"; },3000); return; }
-    clearTimeout(armT); armed=false; $("clear").textContent="清空"; interim=""; partialEl.textContent=""; setText("");
+    clearTimeout(armT); armed=false; $("clear").textContent="清空"; interim=""; setText("");
   });
 
+  window.__vn={join,applyCmds,setText,get text(){return text;}};  // for testing
+  applySettings();
   if(!SR) setStatus("這個瀏覽器不支援語音辨識，請用 Safari 開啟");
-  scrollEnd();
 })();
 </script>
 </body>
